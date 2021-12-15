@@ -47,10 +47,7 @@ func main() {
 		fmt.Println(err)
 	}
 	fmt.Println(res)
-	select {
-	case <-done:
-		fmt.Println("over")
-	}
+	<-done
 }
 
 func product(msg string) (bool, error) {
