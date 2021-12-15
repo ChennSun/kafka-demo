@@ -3,14 +3,12 @@ package main
 import (
 	"fmt"
 	"github.com/Shopify/sarama"
-	"os"
 	"sync"
-	"time"
 )
 
 type exampleConsumerGroupHandler struct{}
 
-func (exampleConsumerGroupHandler) Setup(_ sarama.ConsumerGroupSession) error   {
+func (exampleConsumerGroupHandler) Setup(_ sarama.ConsumerGroupSession) error {
 	fmt.Println("set up")
 	return nil
 }
@@ -26,7 +24,7 @@ func (h exampleConsumerGroupHandler) ConsumeClaim(sess sarama.ConsumerGroupSessi
 	return nil
 }
 
-type myPartition struct {}
+type myPartition struct{}
 
 func (p *myPartition) Partition(message *sarama.ProducerMessage, numPartitions int32) (int32, error) {
 	return 0, nil
@@ -37,20 +35,22 @@ func (p *myPartition) RequiresConsistency() bool {
 }
 
 func main() {
+	done := make(chan int)
 	go func() {
 		consume()
+		done <- 1
 	}()
 	res, err := product("中国人不骗中国人")
 	_, _ = product("222222")
 	_, _ = product("wowo")
-	if(err != nil){
+	if err != nil {
 		fmt.Println(err)
 	}
 	fmt.Println(res)
 	select {
-
-}
-	os.Exit(21312)
+	case <-done:
+		fmt.Println("over")
+	}
 }
 
 func product(msg string) (bool, error) {
@@ -61,7 +61,7 @@ func product(msg string) (bool, error) {
 		return &myPartition{}
 	}
 	producer, err := sarama.NewAsyncProducer([]string{"127.0.0.1:9092"}, cfg)
-	if err != nil{
+	if err != nil {
 		return false, err
 	}
 	var w sync.WaitGroup
@@ -82,33 +82,35 @@ func product(msg string) (bool, error) {
 	producerMessage := &sarama.ProducerMessage{}
 	producerMessage.Topic = "kafka_test_2"
 	producerMessage.Value = sarama.StringEncoder(msg)
-	producer.Input() <-  producerMessage
+	producer.Input() <- producerMessage
 	producer.AsyncClose()
 	w.Wait()
 	return true, nil
 }
 
-func consume()  {
+func consume() {
 	// 普通消费者
 	consumer, err := sarama.NewConsumer([]string{"127.0.0.1:9092"}, sarama.NewConfig())
-	if(err != nil){
+	if err != nil {
 		fmt.Println(err)
 	}
+	var wg sync.WaitGroup
 	for i := 0; i < 4; i++ {
 		tmp := int32(i)
+		wg.Add(1)
 		go func() {
 			partition, err := consumer.ConsumePartition("kafka_test_2", tmp, sarama.OffsetNewest)
 			if err != nil {
 				return
 			}
+			defer func() { _ = consumer.Close() }()
 			for msg := range partition.Messages() {
 				fmt.Printf("Message topic:%q partition:%d offset:%d value：%q\n", msg.Topic, msg.Partition, msg.Offset, string(msg.Value))
 			}
-			_ = consumer.Close()
+			wg.Done()
 		}()
 	}
-
-	time.Sleep(time.Second * 10)
+	wg.Wait()
 
 	// 消费者组
 	//g , _ := sarama.NewConsumerGroup([]string{"127.0.0.1:9092"}, "group_1", sarama.NewConfig())
