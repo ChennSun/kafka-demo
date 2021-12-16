@@ -86,7 +86,7 @@ func product(msg string) (bool, error) {
 }
 
 func consume() {
-	// 普通消费者
+	// 独立消费者
 	consumer, err := sarama.NewConsumer([]string{"127.0.0.1:9092"}, sarama.NewConfig())
 	if err != nil {
 		fmt.Println(err)
